@@ -32,28 +32,36 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
     return [];
   });
 
+  async function getProductsOnStock(productId: number) {
+    return api
+      .get(`/stock/${productId}`)
+      .then(response => response.data)
+  }
+
+  async function hasProductIdOnStock(productId: number, amount: number) {
+    const productsOnStock: Stock = await getProductsOnStock(productId)
+
+    const amountProductOnStock = productsOnStock.amount
+
+    const hasProductOnStock = amount <= amountProductOnStock
+
+    return hasProductOnStock
+  }
+
   const addProduct = async (productId: number) => {
     try {
       let cartUpdated = cart
 
-      const isProductOnCart = cart.some(product => product.id === productId)
+      const productOnCart = cart.filter(product => product.id === productId)[0]
 
-      const productsOnStock: Stock[] = await api
-        .get('/stock')
-        .then(response => response.data)
-      
-      const amountProductOnStock = productsOnStock
-        .filter(stock => stock.id === productId)[0].amount
+      const hasProductOnStock = await hasProductIdOnStock(productId, productOnCart?.amount + 1 || 1)
 
-      const hasProductOnStock = cart.some(product =>
-        (product.id === productId
-          && product.amount < amountProductOnStock)
-      ) || !isProductOnCart
-      
       if (!hasProductOnStock) {
-        toast.error('Quantidade solicitada fora de estoque');
+        toast.error('Quantidade solicitada fora de estoque')
         return
       }
+
+      const isProductOnCart = productOnCart !== undefined
 
       if (isProductOnCart) {
         cartUpdated = cart.map(product => 
@@ -64,14 +72,13 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
           : product
         )
       } else {
-        const allProducts: Product[] = await api
-          .get('/products')
-          .then(response => response.data)
+        const newProduct: Product = await api
+          .get(`/products/${productId}`)
+          .then(response => ({
+            ...response.data,
+            amount: 1
+          }))
 
-        const newProduct = {
-          ...allProducts.filter(product => product.id === productId)[0],
-          amount: 1
-        }
         cartUpdated = [
           ...cart,
           newProduct
@@ -79,7 +86,6 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
       }
       
       setCart(cartUpdated)
-
       localStorage.setItem('@RocketShoes:cart', JSON.stringify(cartUpdated))
     } catch {
       toast.error('Erro na adição do produto');
@@ -88,18 +94,11 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
 
   const removeProduct = (productId: number) => {
     try {
-      const cartUpdated = cart.map(product => {
-        return (
-          product.id === productId ? {
-            ...product,
-            amount: product.amount - 1
-          }
-          : product
-        )
-      })
+      const cartUpdated = cart.filter(product => product.id !== productId)
+
+      if (!cart.some(product => product.id === productId)) throw new Error()
 
       setCart(cartUpdated)
-
       localStorage.setItem('@RocketShoes:cart', JSON.stringify(cartUpdated))
     } catch {
       toast.error('Erro na remoção do produto');
@@ -111,7 +110,24 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
     amount,
   }: UpdateProductAmount) => {
     try {
-      // TODO
+      if (amount <= 0) return
+
+      const hasProductOnStock = await hasProductIdOnStock(productId, amount)
+      
+      if (!hasProductOnStock) {
+        toast.error('Quantidade solicitada fora de estoque');
+        return
+      }
+
+      const cartUpdated = cart.map(product => {
+        return product.id === productId ? {
+          ...product,
+          amount
+        } : product
+      })
+
+      setCart(cartUpdated)
+      localStorage.setItem('@RocketShoes:cart', JSON.stringify(cartUpdated))
     } catch {
       toast.error('Erro na alteração de quantidade do produto');
     }
