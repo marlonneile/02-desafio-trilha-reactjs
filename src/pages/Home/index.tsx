@@ -55,7 +55,6 @@ const Home = (): JSX.Element => {
   return (
     <ProductList>
       {products.map((product) => {
-        console.log(cartItemsAmount[product.id])
         return (
           <li key={product.id}>
             <img src={product.image} alt={product.title} />
